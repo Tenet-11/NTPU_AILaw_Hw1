@@ -1,0 +1,29 @@
+{
+  "id": "term_definition",
+  "name": "術語與解釋標註 (概念連結)",
+  "description": "標註專業術語及其對應的解釋段落，並將兩者連結至相同的概念實體。",
+  "groups": [
+    {
+      "id": "entity",
+      "name": "實體類型",
+      "role": "primary",
+      "labels": [
+        {
+          "id": "term",
+          "name": "專業術語",
+          "tag": "Term",
+          "color": "#FFE082",
+          "shortcut": "1"
+        }
+      ]
+    }
+  ],
+  "export": {
+    "format": "p_tag",
+    "tag_order": ["entity"],
+    "tag_separator": ",",
+    "wrapper_open": "<P>",
+    "wrapper_close": "</P>",
+    "field_separator": "|"
+  }
+}

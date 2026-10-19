@@ -1,0 +1,28 @@
+{
+  "active_annotation_mode": "term_definition",
+  "ui": {
+    "font_family": "Microsoft JhengHei UI",
+    "font_size": 14,
+    "line_spacing": 1.5,
+    "theme": "light",
+    "show_paragraph_breaks": true
+  },
+  "shortcut_overrides": {
+    "_app": {
+      "open": "Ctrl+O",
+      "save": "Ctrl+S",
+      "export_txt": "Ctrl+E",
+      "remove_annotation": "Ctrl+D",
+      "next_file": "Alt+Down",
+      "prev_file": "Alt+Up"
+    },
+    "_comment": "Override shortcuts from the active annotation mode by 'group_id.label_id'. Example: 'argument_type.major_premise': 'F2'. Leave empty {} to use mode defaults."
+  },
+  "behavior": {
+    "confirm_unsaved_on_switch": true,
+    "warn_partial_groups_on_export": true,
+    "auto_popup_on_selection": true,
+    "show_concept_popup": true
+  },
+  "_comment": "User preferences for LexiArbiter. Editing this file does NOT affect annotation output format - that is controlled by configs/annotation_modes/*.json."
+}
