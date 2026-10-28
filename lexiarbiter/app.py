@@ -98,18 +98,21 @@ class MainWindow(QMainWindow):
         self.mode: AnnotationMode = self._select_initial_mode()
 
         self.doc: Optional[Document] = None
+        self._active_annotation_id: Optional[str] = None
 
         # central editor + file panel
         self.editor = AnnotationEditor()
         self.editor.set_context_menu_builder(self._build_context_menu)
         self.editor.selection_changed.connect(self._on_selection_changed)
         self.editor.selection_finished.connect(self._show_quick_label_popup)
+        self.editor.annotation_clicked.connect(self._on_annotation_clicked)
 
         self.file_panel = FilePanel()
         self.file_panel.file_open_requested.connect(self._handle_file_open_requested)
 
         self.concept_panel = ConceptSidebar() # 新增概念側欄
         self.concept_panel.setVisible(self.mode.id == "term_definition") #根據初始的標註模式，決定是否顯示概念側欄
+        self.concept_panel.concept_clicked.connect(self._on_concept_clicked)
 
         # 右側垂直切分 (上方檔案、下方概念)
         right_splitter = QSplitter(Qt.Vertical)
@@ -300,51 +303,90 @@ class MainWindow(QMainWindow):
         self._populate_label_buttons()
 
     def _populate_label_buttons(self):
-        # Remove any existing label-button widgets we added previously.
+        # 移除先前建立的動態按鈕。
         if hasattr(self, "_label_button_actions"):
-            for a in self._label_button_actions:
-                self.toolbar.removeAction(a)
+            for action in self._label_button_actions:
+                self.toolbar.removeAction(action)
+
         self._label_button_actions = []
 
-        for gi, g in enumerate(self.mode.groups):
-            if gi > 0:
-                self._label_button_actions.append(self.toolbar.addSeparator())
-            grp_label = QLabel(f"  {g.name}：")
-            self._label_button_actions.append(self.toolbar.addWidget(grp_label))
-            for lb in g.labels:
-                btn = QPushButton(lb.name)
-                btn.setCursor(Qt.PointingHandCursor)
-                shortcut = self.prefs.label_shortcut(g.id, lb.id, lb.shortcut)
-                tip = lb.name
-                if shortcut:
-                    tip += f"  ({shortcut})"
-                btn.setToolTip(tip)
-                btn.setStyleSheet(self._button_style_for(lb))
-                btn.clicked.connect(self._make_label_handler(g.id, lb.id))
-                action = self.toolbar.addWidget(btn)
-                self._label_button_actions.append(action)
-                btn_broader = QPushButton("設定上位概念")
-                btn_broader.setCursor(Qt.PointingHandCursor)
-                btn_broader.setToolTip("設定某個概念所屬的上位概念")
-                btn_broader.clicked.connect(self.set_broader_concept)
+        show_label_buttons = not self.prefs.behavior.get(
+            "auto_popup_on_selection",
+            True,
+        )
 
-                action = self.toolbar.addWidget(btn_broader)
+        # 開啟自動 Popup 時，不在工具列重複顯示標籤按鈕。
+        if show_label_buttons:
+            for group_index, group in enumerate(
+                self.mode.groups
+            ):
+                if group_index > 0:
+                    separator = self.toolbar.addSeparator()
+                    self._label_button_actions.append(separator)
+
+                group_label = QLabel(f"  {group.name}：")
+                action = self.toolbar.addWidget(group_label)
                 self._label_button_actions.append(action)
 
-        # 「標記解釋」只屬於術語與解釋模式。
+                for label in group.labels:
+                    button = QPushButton(label.name)
+                    button.setCursor(Qt.PointingHandCursor)
+
+                    shortcut = self.prefs.label_shortcut(
+                        group.id,
+                        label.id,
+                        label.shortcut,
+                    )
+
+                    tooltip = label.name
+                    if shortcut:
+                        tooltip += f"  ({shortcut})"
+
+                    button.setToolTip(tooltip)
+                    button.setStyleSheet(
+                        self._button_style_for(label)
+                    )
+                    button.clicked.connect(
+                        self._make_label_handler(
+                            group.id,
+                            label.id,
+                        )
+                    )
+
+                    action = self.toolbar.addWidget(button)
+                    self._label_button_actions.append(action)
+
+        # 以下兩個是一般功能按鈕，不受 Popup 模式影響。
         if self.mode.id == "term_definition":
-            self._label_button_actions.append(
-                self.toolbar.addSeparator()
+            separator = self.toolbar.addSeparator()
+            self._label_button_actions.append(separator)
+
+            broader_button = QPushButton("設定上位概念")
+            broader_button.setCursor(Qt.PointingHandCursor)
+            broader_button.setToolTip(
+                "設定某個概念所屬的上位概念"
+            )
+            broader_button.clicked.connect(
+                self.set_broader_concept
             )
 
-            btn_explanation = QPushButton("標記解釋")
-            btn_explanation.setCursor(Qt.PointingHandCursor)
-            btn_explanation.setToolTip(
-                "將目前反白的文字設為某個概念的解釋"
-            )
-            btn_explanation.clicked.connect(self.apply_explanation)
+            action = self.toolbar.addWidget(broader_button)
+            self._label_button_actions.append(action)
 
-            action = self.toolbar.addWidget(btn_explanation)
+            explanation_button = QPushButton("標記解釋")
+            explanation_button.setCursor(
+                Qt.PointingHandCursor
+            )
+            explanation_button.setToolTip(
+                "將目前反白的文字設為所選術語的解釋"
+            )
+            explanation_button.clicked.connect(
+                self.apply_explanation
+            )
+
+            action = self.toolbar.addWidget(
+                explanation_button
+            )
             self._label_button_actions.append(action)
 
     def _button_style_for(self, lb: LabelDef) -> str:
@@ -529,74 +571,62 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if not self.doc.concepts:
+        # 必須先單擊一筆已標註的術語。
+        if self._active_annotation_id is None:
             QMessageBox.information(
                 self,
-                "尚無概念",
-                "請先標記一個專業術語並建立概念。",
+                "尚未選擇術語",
+                "請先單擊一筆黃色術語標註，"
+                "再反白選取它的解釋文字。",
             )
             return
 
-        # 取得反白文字在原始文件中的起點與終點。
+        ann = self.doc.find_annotation(
+            self._active_annotation_id
+        )
+
+        # 避免目前記住的是已經被刪除的標註。
+        if ann is None:
+            self._active_annotation_id = None
+            QMessageBox.warning(
+                self,
+                "找不到術語",
+                "先前選擇的術語標註已不存在，"
+                "請重新單擊一筆術語。",
+            )
+            return
+
+        if ann.concept_id is None:
+            QMessageBox.warning(
+                self,
+                "術語沒有概念",
+                "這筆術語尚未連結到任何概念，"
+                "請重新建立術語標註。",
+            )
+            return
+
         explanation_start, explanation_end = (
             self.editor.storage_selection()
         )
 
-        # 讓標註者選擇這段解釋屬於哪一個既有概念。
-        dlg = ConceptSelectionDialog(
-            self.doc.concepts,
-            default_text="",
-            parent=self,
-        )
-        dlg.setWindowTitle("選擇解釋所屬概念")
-
-        if not dlg.exec():
-            return
-
-        concept_id, new_name = dlg.get_result()
-
-        # 解釋只能連到既有概念，不能在這裡另外建立新概念。
-        if concept_id is None or new_name:
-            QMessageBox.information(
-                self,
-                "請選擇既有概念",
-                "請從上方清單選擇概念；"
-                "如果概念不存在，請先標記專業術語。",
-            )
-            return
-
-        # 找出所有連到相同概念的術語標註。
-        linked_annotations = [
-            ann
-            for ann in self.doc.annotations
-            if ann.concept_id == concept_id
-        ]
-
-        if not linked_annotations:
-            QMessageBox.warning(
-                self,
-                "找不到術語",
-                "找不到使用此概念的術語標註。",
-            )
-            return
-
-        # 相同概念的自動標註共用同一段解釋。
-        for ann in linked_annotations:
-            ann.explanation_start = explanation_start
-            ann.explanation_end = explanation_end
+        # 只更新使用者剛才點到的這一筆標註。
+        ann.explanation_start = explanation_start
+        ann.explanation_end = explanation_end
 
         self.doc.dirty = True
-        self.editor.refresh_highlights()
+        self.editor.set_active_annotation(ann.id)
         self._refresh_status()
         self._update_window_title()
 
+        term_text = self.doc.text[ann.start:ann.end]
         concept_name = self.doc.concepts.get(
-            concept_id,
-            concept_id,
+            ann.concept_id,
+            ann.concept_id,
         )
+
         self.status.showMessage(
-            f"已將反白文字設為「{concept_name}」的解釋，"
-            f"共更新 {len(linked_annotations)} 個術語標註。",
+            f"已將反白文字設為「{term_text}」"
+            f"（概念：{concept_name}）的解釋。",
             6000,
         )
 
@@ -617,12 +647,12 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if len(self.doc.concepts) < 2:
+        if not self.doc.concepts:
             QMessageBox.information(
                 self,
-                "概念不足",
-                "至少要先建立兩個概念，"
-                "才能設定上位概念。",
+                "尚無概念",
+                "請先標記至少一個專業術語，"
+                "再設定上位概念。",
             )
             return
 
@@ -651,13 +681,11 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # 排除自己，避免把自己設定成自己的上位概念。
-        broader_candidates = {
-            concept_id: concept_name
-            for concept_id, concept_name
-            in self.doc.concepts.items()
-            if concept_id != target_id
-        }
+        # 所有概念都可以成為上位概念。
+        # 最上層概念依作業格式，以自己作為 broader concept。
+        broader_candidates = dict(
+            self.doc.concepts
+        )
 
         # 第二次選擇：上位概念。
         broader_dialog = ConceptSelectionDialog(
@@ -732,8 +760,10 @@ class MainWindow(QMainWindow):
         # 如果使用者設定開啟 Popup，檢查是否為 term_definition 模式、是否開啟彈窗、以及是否有選取文字，則跳出概念選擇器
         if self.mode.id == "term_definition" and self.prefs.behavior.get("show_concept_popup", True) and self.editor.has_selection():
             
-            # 抓取畫面中反白的文字
-            selected_text = self.editor.textCursor().selectedText().strip()
+            # 使用 storage offset 取得原始文件文字，
+            # 避免 Qt 顯示文字與原始換行座標不同。
+            s, e = self.editor.storage_selection()
+            selected_text = self.doc.text[s:e].strip()
                 
             # 將選取的文字作為 default_text 傳入對話框
             dlg = ConceptSelectionDialog(self.doc.concepts, default_text=selected_text, parent=self)
@@ -853,23 +883,41 @@ class MainWindow(QMainWindow):
     def action_remove_annotation_at_cursor(self):
         if self.doc is None:
             return
-        # Prefer selection scope if set.
+
+        removed_ids: set[str] = set()
+
+        # 有選取範圍時，刪除範圍內的標註。
         s, e = self.editor.storage_selection()
+
         if e > s:
-            for a in list(self.doc.annotations_in_range(s, e)):
-                self.doc.remove_annotation(a.id)
-            self.editor.refresh_highlights()
-            self._refresh_status()
-            self._update_window_title()
-            return
-        ann_id = self.editor.annotation_at_cursor()
-        if ann_id is None:
-            self.status.showMessage("游標處沒有標註可刪除。", 3000)
-            return
-        if self.doc.remove_annotation(ann_id):
-            self.editor.refresh_highlights()
-            self._refresh_status()
-            self._update_window_title()
+            for ann in list(
+                self.doc.annotations_in_range(s, e)
+            ):
+                removed_ids.add(ann.id)
+                self.doc.remove_annotation(ann.id)
+
+        else:
+            # 沒有選取範圍時，刪除游標位置的標註。
+            ann_id = self.editor.annotation_at_cursor()
+
+            if ann_id is None:
+                self.status.showMessage(
+                    "游標處沒有標註可刪除。",
+                    3000,
+                )
+                return
+
+            if self.doc.remove_annotation(ann_id):
+                removed_ids.add(ann_id)
+
+        # 如果目前操作中的標註已被刪除，清除記錄。
+        if self._active_annotation_id in removed_ids:
+            self._active_annotation_id = None
+            self.editor.set_active_annotation(None)
+
+        self.editor.refresh_highlights()
+        self._refresh_status()
+        self._update_window_title()
 
     # ----------------------------------------------------------- file ops
 
@@ -1004,6 +1052,7 @@ class MainWindow(QMainWindow):
                 return
 
         self.doc = doc
+        self._active_annotation_id = None
         self.editor.attach(doc, self.mode, self.prefs)
         self.concept_panel.refresh(doc) # 刷新概念側欄
         self._update_window_title()
@@ -1358,6 +1407,98 @@ class MainWindow(QMainWindow):
                 row.addWidget(btn)
             outer.addLayout(row)
         return frame
+
+    def _on_concept_clicked(self, concept_id: str):
+        if self.doc is None:
+            return
+
+        linked_annotations = [
+            ann
+            for ann in self.doc.annotations
+            if ann.concept_id == concept_id
+        ]
+
+        if not linked_annotations:
+            self.status.showMessage(
+                "這個概念目前沒有對應的術語標註。",
+                4000,
+            )
+            return
+
+        # 先跳到這個概念的第一筆術語標註。
+        ann = linked_annotations[0]
+        self.editor.jump_to_annotation(ann.id)
+
+        # 將該筆標註設為目前操作中的標註。
+        self._on_annotation_clicked(ann.id)
+
+    def _on_annotation_clicked(self, ann_id: str):
+        if self.doc is None:
+            return
+
+        ann = self.doc.find_annotation(ann_id)
+        if ann is None:
+            return
+
+        # MainWindow 與 Editor 都記住目前選中的標註。
+        self._active_annotation_id = ann.id
+        self.editor.set_active_annotation(ann.id)
+
+        term_text = self.doc.text[
+            ann.start:ann.end
+        ]
+
+        if ann.concept_id is not None:
+            concept_name = self.doc.concepts.get(
+                ann.concept_id,
+                ann.concept_id,
+            )
+        else:
+            concept_name = "尚未指定概念"
+
+        if ann.broader_concept_id is not None:
+            broader_name = self.doc.concepts.get(
+                ann.broader_concept_id,
+                ann.broader_concept_id,
+            )
+        else:
+            broader_name = "尚未設定"
+
+        # 取得這一筆術語自己的解釋內容。
+        if (
+            ann.explanation_start is not None
+            and ann.explanation_end is not None
+            and 0
+            <= ann.explanation_start
+            < ann.explanation_end
+            <= len(self.doc.text)
+        ):
+            explanation_text = self.doc.text[
+                ann.explanation_start:
+                ann.explanation_end
+            ]
+
+            explanation_text = (
+                explanation_text
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .strip()
+            )
+
+            if len(explanation_text) > 50:
+                explanation_text = (
+                    explanation_text[:47] + "…"
+                )
+        else:
+            explanation_text = "尚未標記"
+
+        self.status.showMessage(
+            f"術語：{term_text}　｜　"
+            f"文件概念：{concept_name}　｜　"
+            f"上位概念：{broader_name}　｜　"
+            f"解釋：{explanation_text}",
+            10000,
+        )
 
     def _on_selection_changed(self, s: int, e: int):
         if e > s and self.doc is not None:

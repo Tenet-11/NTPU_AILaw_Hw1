@@ -1,0 +1,163 @@
+{
+  "format": "lexa",
+  "version": 1,
+  "schema": "term_definition",
+  "source": {
+    "filename": "民法債編總論_純文字_簡易測資.docx",
+    "meta": {}
+  },
+  "concepts": {
+    "C_d22e17b2": "債之發生原因",
+    "C_0a9f14d4": "意定之債",
+    "C_b5bd1f37": "法定之債",
+    "C_cb177334": "無因管理",
+    "C_49066e68": "不當得利",
+    "C_1eff3858": "侵權行為"
+  },
+  "text": "緒論、債之意義性質與債之發生原因\n\n\n\n【債之發生原因及制度目的圖】\n\n表格文字解析：債之發生原因，大致區分為意定之債和法定之債。意定之債主要指依法律關係形成之契約，其機能在於契約自由與契約正義。而法定之債分為無因管理、不當得利、與侵權行為。無因管理之機能在於調和「干涉他人私領域」與「獎勵人類互助行為」兩者；不當得利之機能在於調整不當財貨變動；侵權行為之機能在於調和「被害人權益保護」與「行為人行為自由」。\n\n第一節、\t債之意義與發生原因\n\n債（債之關係），指互相對立的當事人間，一方有要求他方為一定作為或不作為之權利，他方負有一定義務（作為或不作為）之法律關係。舉例而言，當事人成立買賣契約，出賣人甲因此享有請求買受人乙給付價金之權利，同時買受人乙因而負擔支付價金之義務（民§345、民§348、民§367）；丙過失開車撞傷丁，兩人間成立侵權行為損害賠償之法定債之關係，丁因此取得侵權行為損害賠償之債權，丙負損害賠償債務（民§184Ⅰ前段）。由是可知，債之關係的類型、目的繁多，在構成要件上也有所不同，茲將民法規定的各種債之關係的發生原因、類型、要件機能與法律效果表格呈現如下：\n\n成立方式\t發生原因\t要件、機能\t法律效果\n\n意定之債\t契約\t當事人以要約、承諾合致成立。\n\n→貫徹私法自治\t一方當事人得向他方當事人請求特定行為（給付），並合法保有該給付。\n\n法定之債\t無因管理\t未受委任，並無義務，而為他人管理事務。\n\n→權衡禁止干預他人與人類互助精神的獎勵\n\n\t不當得利\t無法律上原因受有利益，致他人受有損害。\n\n→調整不正當的財貨歸屬\n\n\t侵權行為\t故意或過失不法侵害他人權利或利益，致生損害。\n\n→調和被害人權益保護與行為人行動自由\n\n表格文字解析：發生意定之債之原因主要為契約，契約以當事人以要約、承諾合致而成立。而契約之主要機能在於貫徹司法自治。法定之債之發生原因有無因管理、不當得利及侵權行為。無因管理之成立要件為未受委任，並無義務，而為他人管理事務。其主要機能在於權衡禁止干預他人與人類互助精神的獎勵；不當得利之成立要件為無法律上原因受有利益，致他人受有損害，其機能為調整不當的財貨歸屬；侵權行為之成立要件主要為故意或過失不法侵害他人權利或利益致生損害於他人，其機能為調和被害人權益保護與行為人行動自由。而無論意定之債或法定之債，其法律效果均為一方當事人得向他方當事人請求特定行為（給付），並合法保有該給付。\n\n\n\n由上表可知雖各種債之關係的發生原因、規範目的並不相同，但具有統一的概念特徵：「一方得向相對人請求特定之行為（作為或不作為）。」法律效果的同一性，才是債之關係共同成立的因素，也才是界定債之關係的方法。學說上將之稱為「法律效果的相同性 」，即債之關係發生，一方當事人均得向他方當事人請求特定之行為，此特定行為，我們將之稱為「給付」。因此，債之意義為特定當事人間得請求一定給付之法律關係 。",
+  "annotations": [
+    {
+      "start": 43,
+      "end": 49,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "51917652d05d",
+      "note": "",
+      "concept_id": "C_d22e17b2",
+      "explanation_start": 50,
+      "explanation_end": 204,
+      "broader_concept_id": "C_d22e17b2"
+    },
+    {
+      "start": 55,
+      "end": 59,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "9c0e5b7c090f",
+      "note": "",
+      "concept_id": "C_0a9f14d4",
+      "explanation_start": 55,
+      "explanation_end": 59,
+      "broader_concept_id": "C_d22e17b2"
+    },
+    {
+      "start": 60,
+      "end": 64,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "7fdd7bb61b66",
+      "note": "",
+      "concept_id": "C_b5bd1f37",
+      "explanation_start": 60,
+      "explanation_end": 64,
+      "broader_concept_id": "C_d22e17b2"
+    },
+    {
+      "start": 65,
+      "end": 69,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "7d2c6598ca35",
+      "note": "",
+      "concept_id": "C_0a9f14d4",
+      "explanation_start": 69,
+      "explanation_end": 98,
+      "broader_concept_id": "C_d22e17b2"
+    },
+    {
+      "start": 99,
+      "end": 103,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "f5c13ff80cf4",
+      "note": "",
+      "concept_id": "C_b5bd1f37",
+      "explanation_start": 103,
+      "explanation_end": 121,
+      "broader_concept_id": "C_d22e17b2"
+    },
+    {
+      "start": 105,
+      "end": 109,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "5a50c59be568",
+      "note": "",
+      "concept_id": "C_cb177334",
+      "explanation_start": 105,
+      "explanation_end": 109,
+      "broader_concept_id": "C_b5bd1f37"
+    },
+    {
+      "start": 110,
+      "end": 114,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "2fb4d7a0e8a3",
+      "note": "",
+      "concept_id": "C_49066e68",
+      "explanation_start": 110,
+      "explanation_end": 114,
+      "broader_concept_id": "C_b5bd1f37"
+    },
+    {
+      "start": 116,
+      "end": 120,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "6f381c4a79b3",
+      "note": "",
+      "concept_id": "C_1eff3858",
+      "explanation_start": 116,
+      "explanation_end": 120,
+      "broader_concept_id": "C_b5bd1f37"
+    },
+    {
+      "start": 121,
+      "end": 125,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "aba698e91ed1",
+      "note": "",
+      "concept_id": "C_cb177334",
+      "explanation_start": 121,
+      "explanation_end": 155,
+      "broader_concept_id": "C_b5bd1f37"
+    },
+    {
+      "start": 155,
+      "end": 159,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "d5ac0057a725",
+      "note": "",
+      "concept_id": "C_49066e68",
+      "explanation_start": 155,
+      "explanation_end": 172,
+      "broader_concept_id": "C_b5bd1f37"
+    },
+    {
+      "start": 173,
+      "end": 177,
+      "labels": {
+        "entity": "term"
+      },
+      "id": "cc96e8200e07",
+      "note": "",
+      "concept_id": "C_1eff3858",
+      "explanation_start": 173,
+      "explanation_end": 204,
+      "broader_concept_id": "C_b5bd1f37"
+    }
+  ]
+}

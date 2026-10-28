@@ -127,6 +127,7 @@ class AnnotationEditor(QTextEdit):
         self._mode: Optional[AnnotationMode] = None
         self._prefs: Optional[UserPreferences] = None
         self._omap: Optional[_OffsetMap] = None
+        self._active_annotation_id: Optional[str] = None
         self._context_menu_builder = None
         # 追蹤是不是「正在拖左鍵」；右鍵 / 中鍵 / 鍵盤選取都不應觸發 popup。
         self._left_drag_active: bool = False
@@ -146,6 +147,7 @@ class AnnotationEditor(QTextEdit):
         self._doc = doc
         self._mode = mode
         self._prefs = prefs
+        self._active_annotation_id = None
 
         font = QFont(prefs.ui.get("font_family", default_ui_font()),
                      prefs.ui.get("font_size", 14))
@@ -168,6 +170,13 @@ class AnnotationEditor(QTextEdit):
         block_fmt = cursor.blockFormat()
         block_fmt.setLineHeight(int(factor * 100), 1)  # ProportionalHeight
         cursor.setBlockFormat(block_fmt)
+
+    def set_active_annotation(
+        self,
+        ann_id: Optional[str],
+    ):
+        self._active_annotation_id = ann_id
+        self.refresh_highlights()
 
     def set_context_menu_builder(self, fn):
         """`fn(menu, ann_id_or_None, sel_start, sel_end)` populates the menu."""
@@ -198,13 +207,36 @@ class AnnotationEditor(QTextEdit):
             self._left_drag_active = True
         super().mousePressEvent(ev)
 
+    # 使用者點擊已標註文字時，Editor 發出 annotation_clicked
     def mouseReleaseEvent(self, ev):
         super().mouseReleaseEvent(ev)
-        # 只在「左鍵放開」且本輪確實是從左鍵按下開始時觸發；右鍵 / 鍵盤選取都不算。
+
         if ev.button() == Qt.LeftButton and self._left_drag_active:
             self._left_drag_active = False
+
+        # 有拖選文字：顯示快速標註選單。
             if self.has_selection():
-                self.selection_finished.emit(ev.globalPosition().toPoint())
+                self.selection_finished.emit(
+                    ev.globalPosition().toPoint()
+                )
+                return
+
+        # 沒有選取文字：檢查是否點到既有標註。
+            if self._doc is None or self._omap is None:
+                return
+
+            cursor = self.cursorForPosition(
+                ev.position().toPoint()
+            )
+            display_pos = cursor.position()
+            storage_pos = self._omap.to_storage(display_pos)
+
+            annotations = self._doc.annotations_at(storage_pos)
+
+            if annotations:
+                self.annotation_clicked.emit(
+                    annotations[-1].id
+                )
 
     # ------------------------------------------------------ highlight render
     # 滑鼠停在解釋範圍時，顯示該解釋所屬的概念。
@@ -214,13 +246,16 @@ class AnnotationEditor(QTextEdit):
             and self._doc is not None
             and self._omap is not None
         ):
-            cursor = self.cursorForPosition(event.pos())
+            cursor = self.cursorForPosition(
+                event.pos()
+            )
             storage_pos = self._omap.to_storage(
                 cursor.position()
             )
 
-            concept_names: list[str] = []
+            tooltip_blocks: list[str] = []
 
+            # 先檢查滑鼠是否位於某筆術語的解釋範圍。
             for ann in self._doc.annotations:
                 start = ann.explanation_start
                 end = ann.explanation_end
@@ -228,24 +263,117 @@ class AnnotationEditor(QTextEdit):
                 if start is None or end is None:
                     continue
 
-                if start <= storage_pos < end:
-                    if ann.concept_id is not None:
-                        concept_name = self._doc.concepts.get(
+                if not (start <= storage_pos < end):
+                    continue
+
+                term_text = self._doc.text[
+                    ann.start:ann.end
+                ]
+
+                if ann.concept_id is not None:
+                    concept_name = (
+                        self._doc.concepts.get(
                             ann.concept_id,
                             ann.concept_id,
                         )
+                    )
+                else:
+                    concept_name = "尚未指定概念"
 
-                        if concept_name not in concept_names:
-                            concept_names.append(concept_name)
+                if ann.broader_concept_id is not None:
+                    broader_name = (
+                        self._doc.concepts.get(
+                            ann.broader_concept_id,
+                            ann.broader_concept_id,
+                        )
+                    )
+                else:
+                    broader_name = "尚未設定"
 
-            if concept_names:
-                message = (
-                    "概念解釋："
-                    + "、".join(concept_names)
+                if ann.id == self._active_annotation_id:
+                    selected_text = "目前選取：是"
+                else:
+                    selected_text = "目前選取：否"
+
+                block = (
+                    f"對應術語：{term_text}\n"
+                    f"文件概念：{concept_name}\n"
+                    f"上位概念：{broader_name}\n"
+                    f"{selected_text}"
                 )
+
+                if block not in tooltip_blocks:
+                    tooltip_blocks.append(block)
+
+            # 如果不是解釋範圍，再檢查是否停在黃色術語上。
+            if not tooltip_blocks:
+                annotations = self._doc.annotations_at(
+                    storage_pos
+                )
+
+                for ann in annotations:
+                    term_text = self._doc.text[
+                        ann.start:ann.end
+                    ]
+
+                    if ann.concept_id is not None:
+                        concept_name = (
+                            self._doc.concepts.get(
+                                ann.concept_id,
+                                ann.concept_id,
+                            )
+                        )
+                    else:
+                        concept_name = "尚未指定概念"
+
+
+                    if ann.broader_concept_id is not None:
+                        broader_name = (
+                            self._doc.concepts.get(
+                                ann.broader_concept_id,
+                                ann.broader_concept_id,
+                            )
+                        )
+                    else:
+                        broader_name = "尚未設定"
+
+                    if (
+                        ann.explanation_start is not None
+                        and ann.explanation_end is not None
+                    ):
+                        explanation_text = self._doc.text[
+                            ann.explanation_start:
+                            ann.explanation_end
+                        ]
+
+                        explanation_text = (
+                            explanation_text
+                            .replace("\r", " ")
+                            .replace("\n", " ")
+                            .strip()
+                        )
+
+                        if len(explanation_text) > 50:
+                            explanation_text = (
+                                explanation_text[:47] + "…"
+                            )
+                    else:
+                        explanation_text = "尚未標記"
+
+                    block = (
+                        f"術語：{term_text}\n"
+                        f"文件概念：{concept_name}\n"
+                        f"上位概念：{broader_name}\n"
+                        f"解釋：{explanation_text}"
+                    )
+
+                    if block not in tooltip_blocks:
+                        tooltip_blocks.append(block)
+
+            if tooltip_blocks:
                 QToolTip.showText(
                     event.globalPos(),
-                    message,
+                    "\n\n".join(tooltip_blocks),
                     self,
                 )
                 return True
@@ -294,10 +422,43 @@ class AnnotationEditor(QTextEdit):
                 explanation_selection.cursor = explanation_cursor
 
                 explanation_format = QTextCharFormat()
-                explanation_color = QColor("#64B5F6")
-                explanation_color.setAlpha(160 if dark else 90)
-                explanation_format.setBackground(explanation_color)
-                explanation_format.setToolTip("概念解釋")
+                is_active = (
+                    ann.id == self._active_annotation_id
+                )
+                if is_active:
+                    # 目前選中術語的解釋：使用較深的藍色。
+                    explanation_color = QColor("#0288D1")
+                    explanation_color.setAlpha(
+                        220 if dark else 170
+                    )
+                else:
+                    # 其他術語的解釋：維持較淡的藍色。
+                    explanation_color = QColor("#64B5F6")
+                    explanation_color.setAlpha(
+                        160 if dark else 90
+                    )
+
+                explanation_format.setBackground(
+                    explanation_color
+                )
+
+                concept_name = (
+                    self._doc.concepts.get(
+                        ann.concept_id,
+                        ann.concept_id,
+                    )
+                    if ann.concept_id is not None
+                    else "尚未指定概念"
+                )
+
+                term_text = self._doc.text[
+                    ann.start:ann.end
+                ]
+
+                explanation_format.setToolTip(
+                    f"對應術語：{term_text}\n"
+                    f"文件概念：{concept_name}"
+                )
 
                 if dark:
                     explanation_format.setForeground(
@@ -318,6 +479,8 @@ class AnnotationEditor(QTextEdit):
 
                 fmt = QTextCharFormat()
                 self._apply_format_for_labels(fmt, ann)
+                if ann.id == self._active_annotation_id:
+                    fmt.setFontWeight(QFont.Bold)
                 sel.format = fmt
                 selections.append(sel)
             self.setExtraSelections(selections)

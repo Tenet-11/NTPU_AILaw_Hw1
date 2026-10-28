@@ -2,7 +2,8 @@
 import uuid
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QLineEdit, QPushButton, 
+    QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
+    QListWidgetItem, QLineEdit, QPushButton,
     QLabel, QWidget, QMessageBox
 )
 
@@ -56,6 +57,21 @@ class ConceptSelectionDialog(QDialog):
         self.list_widget.itemClicked.connect(lambda item: self.input_edit.setText(item.text()))
         self.list_widget.itemDoubleClicked.connect(self.accept)
 
+    def accept(self):
+        text = self.input_edit.text().strip()
+
+        if not text:
+            QMessageBox.information(
+                self,
+                "概念名稱不可空白",
+                "請選擇既有概念，或輸入新的概念名稱。",
+            )
+            self.input_edit.setFocus()
+            return
+
+        super().accept()
+
+
     def get_result(self) -> tuple[str | None, str | None]:
         """回傳 (已存在的 ID, 新增的名稱)。若輸入框為空則回傳 (None, None)。"""
         text = self.input_edit.text().strip()
@@ -81,6 +97,9 @@ class ConceptSidebar(QWidget):
         title.setFont(f)
         
         self.list_widget = QListWidget()
+        self.list_widget.itemClicked.connect(
+            self._on_item_clicked
+        )
         
         layout.addWidget(title)
         layout.addWidget(self.list_widget)
@@ -90,7 +109,15 @@ class ConceptSidebar(QWidget):
         if not doc or not hasattr(doc, 'concepts'):
             return
         for cid, name in doc.concepts.items():
-            self.list_widget.addItem(f"● {name}")
+            item = QListWidgetItem(f"● {name}")
+            item.setData(Qt.UserRole, cid)
+            self.list_widget.addItem(item)
 
         # 讓側邊欄的概念清單也依照筆畫/字母自動排序
         self.list_widget.sortItems(Qt.AscendingOrder)
+
+    def _on_item_clicked(self, item: QListWidgetItem):
+        concept_id = item.data(Qt.UserRole)
+
+        if concept_id:
+            self.concept_clicked.emit(concept_id)
