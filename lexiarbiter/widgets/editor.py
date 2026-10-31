@@ -28,6 +28,24 @@ from ..core.config import AnnotationMode, UserPreferences, default_ui_font
 from ..core.models import Annotation, Document
 
 
+# 術語模式下依文件概念循環使用。相同 concept_id 會維持同色，前 12 個
+# 概念則各有不同顏色；只影響畫面，不影響 .lexa 的標籤資料。
+_CONCEPT_COLORS = [
+    "#FFE082",  # amber
+    "#80CBC4",  # teal
+    "#90CAF9",  # blue
+    "#CE93D8",  # purple
+    "#FFAB91",  # deep orange
+    "#A5D6A7",  # green
+    "#F48FB1",  # pink
+    "#BCAAA4",  # brown
+    "#9FA8DA",  # indigo
+    "#E6EE9C",  # lime
+    "#80DEEA",  # cyan
+    "#FFCC80",  # orange
+]
+
+
 class _OffsetMap:
     """Bidirectional map between storage offsets (with \\r\\n) and display
     offsets (with \\n)."""
@@ -532,6 +550,22 @@ class AnnotationEditor(QTextEdit):
                 ]
                 underline_style = styles[idx % len(styles)]
                 underline_color = underline_default
+
+        if (
+            self._mode.id == "term_definition"
+            and self._doc is not None
+            and ann.concept_id is not None
+            and ann.concept_id in self._doc.concepts
+        ):
+            concept_ids = list(self._doc.concepts)
+            concept_index = concept_ids.index(ann.concept_id)
+            concept_hex = _CONCEPT_COLORS[
+                concept_index % len(_CONCEPT_COLORS)
+            ]
+            bg_color = _hex_to_qcolor(
+                concept_hex,
+                alpha=bg_alpha,
+            )
 
         if bg_color is None:
             # 無主背景色時：淡黃後備，深色模式提高 alpha 讓 span 仍可辨識。

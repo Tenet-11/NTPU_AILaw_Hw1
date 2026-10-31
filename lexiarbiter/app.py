@@ -479,30 +479,32 @@ class MainWindow(QMainWindow):
         return True
 
 
-    # 搜尋文件中所有與人工選取術語完全相同的文字
-    # 略過原始標註及與既有標註重疊的位置
-    # 並為其餘位置建立具有相同概念資料的自動標註
+    # 搜尋文件中所有與人工選取術語完全相同的文字。
+    # 如果某個相同長詞範圍內只包含既有的較短術語，會以長詞取代短詞；
+    # 交叉重疊或相同範圍等不安全情況仍會略過。
     def _auto_annotate_same_terms(
         self,
         source_ann: Annotation,
         group_id: str,
         label_id: str,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         """自動標註文件中所有與人工標註完全相同的術語。
 
         回傳：
-        added   = 新增的標註數量
-        skipped = 因重疊而略過的數量
+        added    = 新增的標註數量
+        replaced = 被長詞取代的短詞標註數量
+        skipped  = 因不安全重疊而略過的數量
         """
         if self.doc is None:
-            return 0, 0
+            return 0, 0, 0
 
         term = self.doc.text[source_ann.start:source_ann.end]
 
         if not term or not term.strip():
-            return 0, 0
+            return 0, 0, 0
 
         added = 0
+        replaced = 0
         skipped = 0
         search_from = 0
 
@@ -528,8 +530,27 @@ class MainWindow(QMainWindow):
             )
 
             if overlaps:
-                skipped += 1
-                continue
+                # 只有「既有標註被新長詞完整包住，而且不是相同範圍」時，
+                # 才能安全地以長詞取代。交叉重疊一律保留並略過。
+                can_replace_nested = all(
+                    match_start <= ann.start
+                    and ann.end <= match_end
+                    and (
+                        ann.start != match_start
+                        or ann.end != match_end
+                    )
+                    for ann in overlaps
+                )
+
+                if not can_replace_nested:
+                    skipped += 1
+                    continue
+
+                for ann in overlaps:
+                    ann.labels.pop(group_id, None)
+                    if not ann.labels:
+                        self.doc.remove_annotation(ann.id)
+                    replaced += 1
 
             auto_ann = Annotation(
                 start=match_start,
@@ -544,7 +565,7 @@ class MainWindow(QMainWindow):
             self.doc.add_annotation(auto_ann)
             added += 1
 
-        return added, skipped
+        return added, replaced, skipped
 
     
 
@@ -704,11 +725,15 @@ class MainWindow(QMainWindow):
             broader_dialog.get_result()
         )
 
-        if broader_id is None or broader_new_name:
+        if broader_new_name:
+            broader_id = "C_" + uuid.uuid4().hex[:8]
+            self.doc.concepts[broader_id] = broader_new_name
+            self.concept_panel.refresh(self.doc)
+        elif broader_id is None:
             QMessageBox.information(
                 self,
                 "請選擇既有概念",
-                "請從上方清單選擇上位概念。",
+                "請從上方清單選擇上位概念，或輸入新的上位概念。",
             )
             return
 
@@ -827,6 +852,7 @@ class MainWindow(QMainWindow):
             # 只有在「術語與解釋」模式下標記「專業術語」時，
             # 才自動搜尋並標註文件中的相同術語。
             auto_added = 0
+            auto_replaced = 0
             auto_skipped = 0
 
             if (
@@ -834,7 +860,11 @@ class MainWindow(QMainWindow):
                 and group_id == "entity"
                 and label_id == "term"
             ):
-                auto_added, auto_skipped = self._auto_annotate_same_terms(
+                (
+                    auto_added,
+                    auto_replaced,
+                    auto_skipped,
+                ) = self._auto_annotate_same_terms(
                     ann,
                     group_id,
                     label_id,
@@ -846,9 +876,14 @@ class MainWindow(QMainWindow):
             self._update_window_title()
 
             # 將自動標註結果顯示在視窗下方的狀態列。
-            if auto_added > 0 or auto_skipped > 0:
+            if (
+                auto_added > 0
+                or auto_replaced > 0
+                or auto_skipped > 0
+            ):
                 self.status.showMessage(
                     f"已自動新增 {auto_added} 個相同術語；"
+                    f"以長詞取代 {auto_replaced} 個短詞標註；"
                     f"因重疊略過 {auto_skipped} 個。",
                     6000,
                 )
