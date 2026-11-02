@@ -35,6 +35,20 @@ log = logging.getLogger(__name__)
 
 LEXA_VERSION = 1
 
+# 司法開放資料的 JFULL 常以 HTML <br> 標籤表示換行，內容本身卻沒有
+# \n。載入原始 JSON 時先正規化，讓畫面、標註座標與後續匯出共用同一份
+# 純文字。只在原始 JSON 載入時處理；既有 .lexa 的座標不得事後改動。
+_JUDICIAL_BR_RE = re.compile(r"<br\s*/?\s*>", re.IGNORECASE)
+
+
+def _normalize_judicial_text(text: str) -> tuple[str, int]:
+    """Convert HTML-style line breaks in raw JFULL text to ``\n``.
+
+    Returns the normalized text and the number of converted tags so callers
+    can record useful diagnostics without scanning the text twice.
+    """
+    return _JUDICIAL_BR_RE.subn("\n", text)
+
 
 # ---------------------------------------------------------------------------
 # Loaders
@@ -57,9 +71,17 @@ def load_judicial_json(path: Path | str) -> Document:
     if not isinstance(data, dict):
         raise ValueError("無法辨識 JSON 結構")
 
-    text = data.get("JFULL") or data.get("jfull") or ""
-    if not text:
+    raw_text = data.get("JFULL") or data.get("jfull") or ""
+    if not raw_text:
         raise ValueError("JSON 中找不到 JFULL 欄位")
+
+    text, converted_breaks = _normalize_judicial_text(raw_text)
+    if converted_breaks:
+        log.info(
+            "JFULL 換行正規化：%s（轉換 %d 個 <br> 標籤）",
+            path,
+            converted_breaks,
+        )
 
     meta = {k: v for k, v in data.items() if k not in ("JFULL", "jfull")}
     return Document(

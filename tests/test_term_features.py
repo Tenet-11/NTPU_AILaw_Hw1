@@ -10,14 +10,24 @@ from PySide6.QtWidgets import QApplication
 from lexiarbiter.app import MainWindow
 from lexiarbiter.core.config import UserPreferences, list_annotation_modes
 from lexiarbiter.core.models import Annotation, Document
+from lexiarbiter.widgets.concept_panel import ConceptSelectionDialog
 from lexiarbiter.widgets.editor import AnnotationEditor
+
+
+class _FakeTextControl:
+    def setText(self, _text):
+        pass
+
+    def setPlaceholderText(self, _text):
+        pass
 
 
 class _FakeConceptDialog:
     results = []
 
     def __init__(self, *args, **kwargs):
-        pass
+        self.input_label = _FakeTextControl()
+        self.input_edit = _FakeTextControl()
 
     def setWindowTitle(self, _title):
         pass
@@ -73,6 +83,27 @@ class TermFeatureTests(unittest.TestCase):
         )
         window.doc.dirty = False
         window.close()
+
+    def test_concept_dialog_distinguishes_existing_target_and_new_broader(self):
+        concepts = {"C_child": "損害賠償"}
+
+        target_dialog = ConceptSelectionDialog(
+            concepts,
+            allow_new=False,
+        )
+        self.assertTrue(target_dialog.input_edit.isHidden())
+        target_dialog.list_widget.setCurrentRow(0)
+        self.assertEqual(
+            target_dialog.get_result(),
+            ("C_child", None),
+        )
+
+        broader_dialog = ConceptSelectionDialog(concepts)
+        broader_dialog.input_edit.setText("民事責任")
+        self.assertEqual(
+            broader_dialog.get_result(),
+            (None, "民事責任"),
+        )
 
     def test_long_term_replaces_nested_short_terms_at_all_matches(self):
         text = "損害賠償請求權與損害賠償。另有損害賠償請求權。"

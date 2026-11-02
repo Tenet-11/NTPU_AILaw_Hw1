@@ -682,9 +682,10 @@ class MainWindow(QMainWindow):
             self.doc.concepts,
             default_text="",
             parent=self,
+            allow_new=False,
         )
         target_dialog.setWindowTitle(
-            "步驟 1：選擇要設定的概念"
+            "步驟 1：選擇要設定的既有概念"
         )
 
         if not target_dialog.exec():
@@ -716,6 +717,12 @@ class MainWindow(QMainWindow):
         )
         broader_dialog.setWindowTitle(
             "步驟 2：選擇它的上位概念"
+        )
+        broader_dialog.input_label.setText(
+            "2. 或直接輸入新的上位概念："
+        )
+        broader_dialog.input_edit.setPlaceholderText(
+            "輸入新的上位概念名稱..."
         )
 
         if not broader_dialog.exec():

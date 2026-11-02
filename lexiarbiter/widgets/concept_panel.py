@@ -9,8 +9,15 @@ from PySide6.QtWidgets import (
 
 class ConceptSelectionDialog(QDialog):
     """彈出視窗：讓使用者從現有概念挑選，或輸入新概念。"""
-    def __init__(self, concepts: dict[str, str], default_text: str = "", parent=None):
+    def __init__(
+        self,
+        concepts: dict[str, str],
+        default_text: str = "",
+        parent=None,
+        allow_new: bool = True,
+    ):
         super().__init__(parent)
+        self.allow_new = allow_new
         self.setWindowTitle("選擇或新增對應概念")
         self.resize(350, 450)
         
@@ -21,13 +28,16 @@ class ConceptSelectionDialog(QDialog):
         # 依最近加入(或字母)排序顯示
         self._concept_map = {}
         for cid, name in concepts.items():
-            self.list_widget.addItem(name)
+            item = QListWidgetItem(name)
+            item.setData(Qt.UserRole, cid)
+            self.list_widget.addItem(item)
             self._concept_map[name] = cid
         layout.addWidget(self.list_widget)
         # 將清單依照筆畫/字母順序排序
         self.list_widget.sortItems(Qt.AscendingOrder)
 
-        layout.addWidget(QLabel("2. 或直接輸入新概念："))
+        self.input_label = QLabel("2. 或直接輸入新概念：")
+        layout.addWidget(self.input_label)
         self.input_edit = QLineEdit()
         self.input_edit.setPlaceholderText("輸入新術語概念...")
         # 自動將反白的文字填入輸入框
@@ -35,6 +45,11 @@ class ConceptSelectionDialog(QDialog):
         # 選取框內所有文字，方便使用者如果不滿意可以直接打字覆蓋
         self.input_edit.selectAll()
         layout.addWidget(self.input_edit)
+
+        # 有些流程（例如「要被設定的子概念」）只能選既有概念。
+        # 直接隱藏新增欄位，避免使用者輸入後才收到拒絕訊息。
+        self.input_label.setVisible(allow_new)
+        self.input_edit.setVisible(allow_new)
 
         # 按鈕區
         btn_layout = QHBoxLayout()
@@ -54,10 +69,25 @@ class ConceptSelectionDialog(QDialog):
         layout.addLayout(btn_layout)
 
         # 點擊清單時自動填入輸入框
-        self.list_widget.itemClicked.connect(lambda item: self.input_edit.setText(item.text()))
+        self.list_widget.itemClicked.connect(
+            lambda item: self.input_edit.setText(item.text())
+        )
         self.list_widget.itemDoubleClicked.connect(self.accept)
 
     def accept(self):
+        if not self.allow_new:
+            if self.list_widget.currentItem() is None:
+                QMessageBox.information(
+                    self,
+                    "請選擇既有概念",
+                    "請從上方清單選擇要設定的概念。",
+                )
+                self.list_widget.setFocus()
+                return
+
+            super().accept()
+            return
+
         text = self.input_edit.text().strip()
 
         if not text:
@@ -74,6 +104,12 @@ class ConceptSelectionDialog(QDialog):
 
     def get_result(self) -> tuple[str | None, str | None]:
         """回傳 (已存在的 ID, 新增的名稱)。若輸入框為空則回傳 (None, None)。"""
+        if not self.allow_new:
+            item = self.list_widget.currentItem()
+            if item is None:
+                return None, None
+            return item.data(Qt.UserRole), None
+
         text = self.input_edit.text().strip()
         if not text:
             return None, None
