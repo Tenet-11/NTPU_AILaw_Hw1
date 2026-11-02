@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QTextCharFormat
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication
 
 from lexiarbiter.app import MainWindow
@@ -85,20 +86,36 @@ class TermFeatureTests(unittest.TestCase):
         window.close()
 
     def test_concept_dialog_distinguishes_existing_target_and_new_broader(self):
-        concepts = {"C_child": "損害賠償"}
+        concepts = {
+            "C_root": "債之發生原因",
+            "C_child": "意定之債",
+        }
+        broader_by_concept = {
+            "C_root": "C_root",
+            "C_child": "C_root",
+        }
 
         target_dialog = ConceptSelectionDialog(
             concepts,
             allow_new=False,
+            broader_by_concept=broader_by_concept,
         )
         self.assertTrue(target_dialog.input_edit.isHidden())
-        target_dialog.list_widget.setCurrentRow(0)
+        root = target_dialog.tree_widget.topLevelItem(0)
+        self.assertEqual(root.data(0, Qt.UserRole), "C_root")
+        self.assertEqual(root.childCount(), 1)
+        child = root.child(0)
+        self.assertEqual(child.data(0, Qt.UserRole), "C_child")
+        target_dialog._on_tree_item_clicked(child, 0)
         self.assertEqual(
             target_dialog.get_result(),
             ("C_child", None),
         )
 
-        broader_dialog = ConceptSelectionDialog(concepts)
+        broader_dialog = ConceptSelectionDialog(
+            concepts,
+            broader_by_concept=broader_by_concept,
+        )
         broader_dialog.input_edit.setText("民事責任")
         self.assertEqual(
             broader_dialog.get_result(),
@@ -173,6 +190,70 @@ class TermFeatureTests(unittest.TestCase):
             text[short_annotations[0].start:short_annotations[0].end],
             short_term,
         )
+        window.doc.dirty = False
+        window.close()
+
+    def test_same_terms_default_to_self_and_new_explanation_updates_all(self):
+        text = "意定之債主要指契約。再次提到意定之債。"
+        term = "意定之債"
+        source = Annotation(
+            start=0,
+            end=len(term),
+            labels={"entity": "term"},
+            concept_id="C_term",
+        )
+        doc = Document(
+            text=text,
+            annotations=[source],
+            concepts={"C_term": term},
+        )
+
+        window = MainWindow()
+        window.doc = doc
+        window.mode = self.mode
+
+        added, replaced, skipped = window._auto_annotate_same_terms(
+            source,
+            "entity",
+            "term",
+        )
+
+        self.assertEqual((added, replaced, skipped), (1, 0, 0))
+        annotations = sorted(doc.annotations, key=lambda ann: ann.start)
+        self.assertEqual(len(annotations), 2)
+        for annotation in annotations:
+            self.assertEqual(
+                (
+                    annotation.explanation_start,
+                    annotation.explanation_end,
+                ),
+                (annotation.start, annotation.end),
+            )
+
+        window.editor.attach(doc, self.mode, window.prefs)
+        window._active_annotation_id = source.id
+
+        explanation_start = text.index("主要")
+        explanation_end = text.index("再次")
+        cursor = window.editor.textCursor()
+        cursor.setPosition(explanation_start)
+        cursor.setPosition(
+            explanation_end,
+            QTextCursor.KeepAnchor,
+        )
+        window.editor.setTextCursor(cursor)
+        window.apply_explanation()
+
+        self.assertEqual(
+            (source.explanation_start, source.explanation_end),
+            (explanation_start, explanation_end),
+        )
+        second = annotations[1]
+        self.assertEqual(
+            (second.explanation_start, second.explanation_end),
+            (explanation_start, explanation_end),
+        )
+
         window.doc.dirty = False
         window.close()
 

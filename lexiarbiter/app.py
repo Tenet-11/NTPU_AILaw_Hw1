@@ -503,6 +503,16 @@ class MainWindow(QMainWindow):
         if not term or not term.strip():
             return 0, 0, 0
 
+        # 每一筆術語標註都有自己的解釋範圍。使用者尚未另外指定時，
+        # 預設以該筆術語本身作為解釋；之後 apply_explanation 只更新
+        # 使用者目前點選的那一筆。
+        if (
+            source_ann.explanation_start is None
+            or source_ann.explanation_end is None
+        ):
+            source_ann.explanation_start = source_ann.start
+            source_ann.explanation_end = source_ann.end
+
         added = 0
         replaced = 0
         skipped = 0
@@ -557,8 +567,8 @@ class MainWindow(QMainWindow):
                 end=match_end,
                 labels={group_id: label_id},
                 concept_id=source_ann.concept_id,
-                explanation_start=source_ann.explanation_start,
-                explanation_end=source_ann.explanation_end,
+                explanation_start=match_start,
+                explanation_end=match_end,
                 broader_concept_id=source_ann.broader_concept_id,
             )
 
@@ -630,9 +640,17 @@ class MainWindow(QMainWindow):
             self.editor.storage_selection()
         )
 
-        # 只更新使用者剛才點到的這一筆標註。
-        ann.explanation_start = explanation_start
-        ann.explanation_end = explanation_end
+        # 解釋屬於文件概念：同一 concept_id 的所有術語標註一起更新。
+        # 例如任一筆「意定之債」指定新解釋後，全文其他「意定之債」
+        # 也會指向同一段解釋。
+        linked_annotations = [
+            item
+            for item in self.doc.annotations
+            if item.concept_id == ann.concept_id
+        ]
+        for item in linked_annotations:
+            item.explanation_start = explanation_start
+            item.explanation_end = explanation_end
 
         self.doc.dirty = True
         self.editor.set_active_annotation(ann.id)
@@ -647,12 +665,29 @@ class MainWindow(QMainWindow):
 
         self.status.showMessage(
             f"已將反白文字設為「{term_text}」"
-            f"（概念：{concept_name}）的解釋。",
+            f"（概念：{concept_name}）的解釋，"
+            f"共更新 {len(linked_annotations)} 筆相同概念標註。",
             6000,
         )
 
     # 設定某個概念所屬的上位概念，
     # 並同步更新所有使用該概念的術語標註。
+    def _concept_broader_map(self) -> dict[str, str]:
+        """從術語標註整理 concept -> broader concept 的階層關係。"""
+        if self.doc is None:
+            return {}
+        result: dict[str, str] = {}
+        for ann in self.doc.annotations:
+            if (
+                ann.concept_id in self.doc.concepts
+                and ann.broader_concept_id in self.doc.concepts
+            ):
+                result.setdefault(
+                    ann.concept_id,
+                    ann.broader_concept_id,
+                )
+        return result
+
     def set_broader_concept(self):
         if self.doc is None:
             self.status.showMessage(
@@ -683,6 +718,7 @@ class MainWindow(QMainWindow):
             default_text="",
             parent=self,
             allow_new=False,
+            broader_by_concept=self._concept_broader_map(),
         )
         target_dialog.setWindowTitle(
             "步驟 1：選擇要設定的既有概念"
@@ -714,6 +750,7 @@ class MainWindow(QMainWindow):
             broader_candidates,
             default_text="",
             parent=self,
+            broader_by_concept=self._concept_broader_map(),
         )
         broader_dialog.setWindowTitle(
             "步驟 2：選擇它的上位概念"
@@ -798,7 +835,12 @@ class MainWindow(QMainWindow):
             selected_text = self.doc.text[s:e].strip()
                 
             # 將選取的文字作為 default_text 傳入對話框
-            dlg = ConceptSelectionDialog(self.doc.concepts, default_text=selected_text, parent=self)
+            dlg = ConceptSelectionDialog(
+                self.doc.concepts,
+                default_text=selected_text,
+                parent=self,
+                broader_by_concept=self._concept_broader_map(),
+            )
             if dlg.exec():
                 selected_id, new_name = dlg.get_result()
                 if new_name:
